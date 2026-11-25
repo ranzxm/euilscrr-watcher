@@ -50,6 +50,7 @@ constexpr UINT WM_APP_SHOW = WM_APP + 3;
 
 constexpr UINT_PTR kTimerUiTick = 1;
 constexpr int kCtrlTokenEdit = 101;
+constexpr int kResAppIcon = 1;
 constexpr int kResFontInter = 101;
 constexpr UINT kTrayIconId = 1;
 constexpr UINT kMenuOpen = 2001;
@@ -302,50 +303,9 @@ std::wstring pick_available_font(IDWriteFactory* dwrite, std::initializer_list<c
 }
 
 // Generate monochrome vinyl-dot icon matching euilscrr brand mark without external .ico resource.
-HICON create_app_icon(int size) {
-  BITMAPV5HEADER bi{};
-  bi.bV5Size = sizeof(bi);
-  bi.bV5Width = size;
-  bi.bV5Height = -size;
-  bi.bV5Planes = 1;
-  bi.bV5BitCount = 32;
-  bi.bV5Compression = BI_BITFIELDS;
-  bi.bV5RedMask = 0x00FF0000;
-  bi.bV5GreenMask = 0x0000FF00;
-  bi.bV5BlueMask = 0x000000FF;
-  bi.bV5AlphaMask = 0xFF000000;
-
-  void* bits = nullptr;
-  HDC hdc = GetDC(nullptr);
-  HBITMAP color_bmp = CreateDIBSection(hdc, reinterpret_cast<BITMAPINFO*>(&bi), DIB_RGB_COLORS, &bits, nullptr, 0);
-  ReleaseDC(nullptr, hdc);
-  if (!color_bmp || !bits) return LoadIconW(nullptr, IDI_APPLICATION);
-
-  auto* px = static_cast<uint32_t*>(bits);
-  const float c = (size - 1) * 0.5f;
-  const float r_outer = size * 0.45f;
-  const float r_inner = size * 0.16f;
-  for (int y = 0; y < size; ++y) {
-    for (int x = 0; x < size; ++x) {
-      float dx = x - c;
-      float dy = y - c;
-      float dist = std::sqrt(dx * dx + dy * dy);
-      uint32_t argb = 0x00000000;
-      if (dist <= r_outer) {
-        argb = (dist <= r_inner) ? 0xFF09090B : 0xFFF4F4F5;
-      }
-      px[y * size + x] = argb;
-    }
-  }
-
-  HBITMAP mask_bmp = CreateBitmap(size, size, 1, 1, nullptr);
-  ICONINFO ii{};
-  ii.fIcon = TRUE;
-  ii.hbmColor = color_bmp;
-  ii.hbmMask = mask_bmp;
-  HICON icon = CreateIconIndirect(&ii);
-  DeleteObject(color_bmp);
-  DeleteObject(mask_bmp);
+HICON load_app_icon(HINSTANCE instance, int size) {
+  auto icon = static_cast<HICON>(
+      LoadImageW(instance, MAKEINTRESOURCEW(kResAppIcon), IMAGE_ICON, size, size, LR_DEFAULTCOLOR));
   return icon ? icon : LoadIconW(nullptr, IDI_APPLICATION);
 }
 
@@ -367,8 +327,8 @@ class WatcherApp {
   int run(HINSTANCE instance, bool start_minimized) {
     instance_ = instance;
     init_direct2d();
-    icon_small_ = create_app_icon(16);
-    icon_large_ = create_app_icon(32);
+    icon_small_ = load_app_icon(instance_, GetSystemMetrics(SM_CXSMICON));
+    icon_large_ = load_app_icon(instance_, GetSystemMetrics(SM_CXICON));
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
